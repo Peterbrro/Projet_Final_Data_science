@@ -42,5 +42,37 @@ def task_01_import_m1(data_path):
     
     return full_df
 
+def task_02_aggregate_m1_to_m15(df_m1):
+    print("\n--- DÉBUT T02 : AGRÉGATION M1 -> M15 ---")
+    
+    # Copie pour éviter de modifier l'original et mise en index pour le resample
+    df_resample = df_m1.set_index('timestamp').copy()
+    
+    # Agrégation selon les règles strictes du sujet (Section 3.2)
+    # label='left' : le groupe 17:00 contient les données de 17:00 à 17:14
+    df_m15 = df_resample.resample('15min', label='left').agg({
+        'open': 'first',   # open_15m : open 1ère minute
+        'high': 'max',     # high_15m : max(high) sur 15 minutes
+        'low': 'min',      # low_15m : min(low) sur 15 minutes
+        'close': 'last',   # close_15m : close dernière minute
+        'vol': 'sum'       # Volume total sur la période
+    })
+    
+    # Suppression des bougies sans données (week-ends / marchés fermés)
+    df_m15 = df_m15.dropna(subset=['open']).reset_index()
+    
+    print(f"Agrégation terminée : {len(df_m15)} bougies M15 créées.")
+    
+    return df_m15
+
 if __name__ == "__main__":
+    # Exécution Phase 1
     df_m1 = task_01_import_m1('data/')
+    
+    # Exécution Phase 2
+    if df_m1 is not None:
+        df_m15 = task_02_aggregate_m1_to_m15(df_m1)
+        
+        # Affichage des premières lignes pour vérification
+        print("\n--- APERÇU DONNÉES M15 ---")
+        print(df_m15.head())
