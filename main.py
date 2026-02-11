@@ -4,6 +4,7 @@ import os
 import re
 import matplotlib.pyplot as plt
 import seaborn as sns
+import pandas_ta as ta
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.graphics.tsaplots import plot_acf
 
@@ -46,15 +47,15 @@ def task_03_clean_m15(df_m15):
 def task_04_exploratory_analysis(df):
     print("\n--- DÉBUT T04 : ANALYSE EXPLORATOIRE ---")
     df = df.copy()
-    
-    # 1. Distribution des rendements
     df['returns'] = df['close'].pct_change()
+    
+    # Histogramme
     plt.figure(figsize=(10, 6))
     sns.histplot(df['returns'].dropna(), bins=100, kde=True)
     plt.title("Distribution des Rendements GBP/USD")
     plt.savefig("data/distribution_rendements.png")
     
-    # 2. Analyse horaire (Volatilité)
+    # Volatilité horaire
     df['hour'] = df['timestamp'].dt.hour
     hourly_vol = df.groupby('hour')['returns'].std()
     plt.figure(figsize=(10, 6))
@@ -62,18 +63,55 @@ def task_04_exploratory_analysis(df):
     plt.title("Volatilité par Heure (Saisonnalité)")
     plt.savefig("data/volatilite_horaire.png")
 
-    # 3. Test ADF (Stationnarité)
+    # Test ADF
     print("Calcul du Test ADF...")
     adf_test = adfuller(df['returns'].dropna())
     print(f"Statistique ADF : {adf_test[0]:.4f}")
-    print(f"p-value : {adf_test[1]:.4e}") # On attend < 0.05
+    print(f"p-value : {adf_test[1]:.4e}")
     
-    # 4. Autocorrélation (ACF)
-    plt.figure(figsize=(10, 6))
-    plot_acf(df['returns'].dropna(), lags=40)
-    plt.savefig("data/autocorrelation_acf.png")
-    
+    plt.close('all')
     print("T04 Terminée : Graphiques sauvegardés dans /data.")
+    return df
+
+def task_05_feature_engineering(df):
+    print("\n--- DÉBUT T05 : FEATURE ENGINEERING (V2) ---")
+    df = df.copy()
+
+    # --- 6.1 BLOC COURT TERME ---
+    df['return_1'] = df['close'].pct_change(1)
+    df['return_4'] = df['close'].pct_change(4)
+    df['ema_20'] = ta.ema(df['close'], length=20)
+    df['ema_50'] = ta.ema(df['close'], length=50)
+    df['ema_diff'] = df['ema_20'] - df['ema_50']
+    df['rsi_14'] = ta.rsi(df['close'], length=14)
+    df['rolling_std_20'] = df['close'].rolling(window=20).std()
+    df['range_15m'] = df['high'] - df['low']
+    df['body'] = (df['close'] - df['open']).abs()
+    df['upper_wick'] = df['high'] - df[['open', 'close']].max(axis=1)
+    df['lower_wick'] = df[['open', 'close']].min(axis=1) - df['low']
+
+    # --- 6.2 BLOC CONTEXTE & RÉGIME ---
+    df['ema_200'] = ta.ema(df['close'], length=200)
+    df['distance_to_ema200'] = df['close'] - df['ema_200']
+    # Calcul de la pente de l'EMA 50 sur 5 bougies
+    df['slope_ema50'] = df['ema_50'].diff(5)
+    
+    df['atr_14'] = ta.atr(df['high'], df['low'], df['close'], length=14)
+    df['rolling_std_100'] = df['close'].rolling(window=100).std()
+    df['volatility_ratio'] = df['rolling_std_20'] / df['rolling_std_100']
+    
+    # ADX (Force directionnelle)
+    adx_df = ta.adx(df['high'], df['low'], df['close'], length=14)
+    df = pd.concat([df, adx_df], axis=1)
+    
+    # MACD
+    macd_df = ta.macd(df['close'])
+    df = pd.concat([df, macd_df], axis=1)
+
+    # Nettoyage final pour supprimer les lignes de warm-up des indicateurs
+    df = df.dropna().reset_index(drop=True)
+    
+    print(f"T05 Terminée : {df.shape[1]} colonnes créées.")
     return df
 
 if __name__ == "__main__":
@@ -81,6 +119,8 @@ if __name__ == "__main__":
     df = task_02_aggregate_m1_to_m15(df)
     df = task_03_clean_m15(df)
     df = task_04_exploratory_analysis(df)
+    df = task_05_feature_engineering(df)
     
-    # Sauvegarde finale pour la T05
-    df.to_csv('data/gbpusd_m15_eda.csv', index=False)
+    # Sauvegarde finale pour la Phase 6
+    df.to_csv('data/gbpusd_m15_features.csv', index=False)
+    print(f"Dataset final avec features sauvegardé : {len(df)} lignes.")
