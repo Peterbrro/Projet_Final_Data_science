@@ -2,6 +2,10 @@ import pandas as pd
 import glob
 import os
 import re
+import matplotlib.pyplot as plt
+import seaborn as sns
+from statsmodels.tsa.stattools import adfuller
+from statsmodels.graphics.tsaplots import plot_acf
 
 def task_01_import_m1(data_path):
     print("--- DÉBUT T01 : IMPORTATION ET VÉRIFICATION ---")
@@ -15,15 +19,6 @@ def task_01_import_m1(data_path):
     full_df['timestamp'] = pd.to_datetime(full_df['date'] + ' ' + full_df['time'], format='%Y.%m.%d %H:%M')
     full_df = full_df[['timestamp', 'open', 'high', 'low', 'close', 'vol']]
     full_df = full_df.sort_values('timestamp').drop_duplicates(subset=['timestamp']).reset_index(drop=True)
-    
-    time_diff = full_df['timestamp'].diff().dt.total_seconds()
-    auto_gaps = time_diff[time_diff > 60]
-    txt_files = glob.glob(os.path.join(data_path, "*.txt"))
-    official_gaps_count = 0
-    for f in txt_files:
-        with open(f, 'r') as file:
-            official_gaps_count += len(re.findall(r"Gap of", file.read()))
-
     print(f"T01 Terminée : {len(full_df)} lignes.")
     return full_df
 
@@ -44,36 +39,48 @@ def task_02_aggregate_m1_to_m15(df_m1):
 def task_03_clean_m15(df_m15):
     print("\n--- DÉBUT T03 : NETTOYAGE M15 ---")
     df_clean = df_m15.copy()
-    initial_count = len(df_clean)
-    
-    # 1. Contrôle des prix négatifs ou nuls
-    df_clean = df_clean[(df_clean['open'] > 0) & (df_clean['high'] > 0) & 
-                        (df_clean['low'] > 0) & (df_clean['close'] > 0)]
-    
-    # 2. Détection gaps anormaux (Écart temporel > 15 min hors weekend)
-    # On calcule l'écart entre deux bougies consécutives
-    time_gap = df_clean['timestamp'].diff().dt.total_seconds()
-    # Un gap anormal est un saut > 15 min (900s)
-    gaps_anormaux = time_gap[time_gap > 900]
-    
-    # 3. Suppression bougies incomplètes (Cohérence OHLC)
-    # Le High doit être >= au Low et aux autres prix
-    df_clean = df_clean[(df_clean['high'] >= df_clean['low']) & 
-                        (df_clean['high'] >= df_clean['open']) & 
-                        (df_clean['low'] <= df_clean['close'])]
-
-    print(f"T03 Terminée.")
-    print(f"Lignes supprimées : {initial_count - len(df_clean)}")
-    print(f"Nombre de gaps temporels (>15min) détectés en M15 : {len(gaps_anormaux)}")
-    
+    df_clean = df_clean[(df_clean['open'] > 0) & (df_clean['high'] >= df_clean['low'])]
+    print(f"T03 Terminée : {len(df_clean)} bougies propres.")
     return df_clean
 
+def task_04_exploratory_analysis(df):
+    print("\n--- DÉBUT T04 : ANALYSE EXPLORATOIRE ---")
+    df = df.copy()
+    
+    # 1. Distribution des rendements
+    df['returns'] = df['close'].pct_change()
+    plt.figure(figsize=(10, 6))
+    sns.histplot(df['returns'].dropna(), bins=100, kde=True)
+    plt.title("Distribution des Rendements GBP/USD")
+    plt.savefig("data/distribution_rendements.png")
+    
+    # 2. Analyse horaire (Volatilité)
+    df['hour'] = df['timestamp'].dt.hour
+    hourly_vol = df.groupby('hour')['returns'].std()
+    plt.figure(figsize=(10, 6))
+    hourly_vol.plot(kind='bar')
+    plt.title("Volatilité par Heure (Saisonnalité)")
+    plt.savefig("data/volatilite_horaire.png")
+
+    # 3. Test ADF (Stationnarité)
+    print("Calcul du Test ADF...")
+    adf_test = adfuller(df['returns'].dropna())
+    print(f"Statistique ADF : {adf_test[0]:.4f}")
+    print(f"p-value : {adf_test[1]:.4e}") # On attend < 0.05
+    
+    # 4. Autocorrélation (ACF)
+    plt.figure(figsize=(10, 6))
+    plot_acf(df['returns'].dropna(), lags=40)
+    plt.savefig("data/autocorrelation_acf.png")
+    
+    print("T04 Terminée : Graphiques sauvegardés dans /data.")
+    return df
+
 if __name__ == "__main__":
-    df_m1 = task_01_import_m1('data/')
-    if df_m1 is not None:
-        df_m15 = task_02_aggregate_m1_to_m15(df_m1)
-        df_final = task_03_clean_m15(df_m15)
-        
-        # Sauvegarde du dataset prêt pour l'analyse
-        df_final.to_csv('data/gbpusd_m15_clean.csv', index=False)
-        print(f"Dataset final prêt : {len(df_final)} bougies.")
+    df = task_01_import_m1('data/')
+    df = task_02_aggregate_m1_to_m15(df)
+    df = task_03_clean_m15(df)
+    df = task_04_exploratory_analysis(df)
+    
+    # Sauvegarde finale pour la T05
+    df.to_csv('data/gbpusd_m15_eda.csv', index=False)
