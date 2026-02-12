@@ -12,6 +12,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
 import gymnasium as gym
 from gymnasium import spaces
+from stable_baselines3 import PPO
 
 # --- PHASE 8 : DÉFINITION DE L'ENVIRONNEMENT DE TRADING (RL) ---
 class TradingEnv(gym.Env):
@@ -216,6 +217,28 @@ def task_08_rl_env_setup(df):
     print(f"T08 Terminée : Environnement Gym créé. (Shape obs: {obs.shape})")
     return env
 
+def task_09_train_rl(env):
+    print("\n--- DÉBUT T09 : ENTRAÎNEMENT DE L'AGENT RL (PPO) ---")
+    
+    # On définit le modèle
+    # MlpPolicy : Réseau de neurones classique (parfait pour des données tabulaires)
+    # verbose=1 : Pour voir l'évolution de la récompense dans la console
+    model = PPO("MlpPolicy", env, verbose=1, device="cpu")
+    
+    print("Lancement de l'apprentissage (10 000 timesteps)...")
+    model.learn(total_timesteps=10000)
+    
+    # Sauvegarde dans le dossier output (pour qu'il arrive sur ton PC)
+    model_path = "output/ppo_trading_model"
+    model.save(model_path)
+    
+    print(f"T09 Terminée : Modèle sauvegardé sous {model_path}.zip")
+    return model
+
+
+   
+    
+ 
 if __name__ == "__main__":
     # Définition des dossiers
     DATA_DIR = 'data/'
@@ -232,6 +255,9 @@ if __name__ == "__main__":
     
     # Task 08
     env = task_08_rl_env_setup(df)
+
+    # Task 09 : Training
+    model_rl = task_09_train_rl(env)
     
     # Sauvegarde finale
     df.to_csv(f'{OUT_DIR}/gbpusd_final_features.csv', index=False)
