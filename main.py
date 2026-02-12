@@ -12,6 +12,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
 import gymnasium as gym
 from gymnasium import spaces
+from stable_baselines3 import PPO
 
 # --- PHASE 8 : DÉFINITION DE L'ENVIRONNEMENT DE TRADING (RL) ---
 class TradingEnv(gym.Env):
@@ -216,6 +217,70 @@ def task_08_rl_env_setup(df):
     print(f"T08 Terminée : Environnement Gym créé. (Shape obs: {obs.shape})")
     return env
 
+def task_09_train_rl(env):
+    print("\n--- DÉBUT T09 : ENTRAÎNEMENT DE L'AGENT RL (PPO) ---")
+    
+    # On définit le modèle
+    # MlpPolicy : Réseau de neurones classique (parfait pour des données tabulaires)
+    # verbose=1 : Pour voir l'évolution de la récompense dans la console
+    model = PPO("MlpPolicy", env, verbose=1, device="cpu")
+    
+    print("Lancement de l'apprentissage (10 000 timesteps)...")
+    model.learn(total_timesteps=10000)
+    
+    # Sauvegarde dans le dossier output (pour qu'il arrive sur ton PC)
+    model_path = "output/ppo_trading_model"
+    model.save(model_path)
+    
+    print(f"T09 Terminée : Modèle sauvegardé sous {model_path}.zip")
+    return model
+
+def task_10_backtest(df, model, out_path):
+    print("\n--- DÉBUT T10 : BACKTEST DU MODÈLE RL ---")
+    # On crée un environnement de test avec les mêmes données
+    env = TradingEnv(df)
+    obs, _ = env.reset()
+    
+    rewards = []
+    actions = []
+    done = False
+    
+    print("Simulation des trades en cours...")
+    while not done:
+        # L'IA prédit l'action sans exploration (deterministic=True)
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, done, _, _ = env.step(action)
+        
+        rewards.append(reward)
+        actions.append(action)
+    
+    # Analyse des résultats
+    df_res = pd.DataFrame({'reward': rewards, 'action': actions})
+    
+    # 0 = Cash, 1 = Long, 2 = Short. On calcule le rendement cumulé.
+    # Note : Le reward est déjà le next_return (ou -next_return)
+    df_res['cum_return'] = (1 + df_res['reward']).cumprod()
+    
+    # Graphique de performance
+    plt.figure(figsize=(12, 6))
+    plt.plot(df_res['cum_return'], label='Agent RL (PPO)', color='blue')
+    plt.axhline(y=1, color='red', linestyle='--', label='Break-even')
+    plt.title("Backtest : Performance Cumulée de l'Agent IA")
+    plt.xlabel("Nombre de bougies (15 min)")
+    plt.ylabel("Multiplicateur de Capital")
+    plt.legend()
+    plt.savefig(f"{out_path}/backtest_rl.png")
+    plt.close()
+    
+    # Statistiques rapides
+    final_perf = (df_res['cum_return'].iloc[-1] - 1) * 100
+    print(f"Nombre de trades simulés : {len(df_res)}")
+    print(f"Répartition des actions : 0(Rien):{actions.count(0)}, 1(Achat):{actions.count(1)}, 2(Vente):{actions.count(2)}")
+    print(f"T10 Terminée : Performance totale : {final_perf:.2f}%")
+
+   
+    
+ 
 if __name__ == "__main__":
     # Définition des dossiers
     DATA_DIR = 'data/'
@@ -232,7 +297,13 @@ if __name__ == "__main__":
     
     # Task 08
     env = task_08_rl_env_setup(df)
+
+    # Task 09 : Training
+    model_rl = task_09_train_rl(env)
+    
+    # Task 10 : Backtest
+    task_10_backtest(df, model_rl, OUT_DIR)
     
     # Sauvegarde finale
     df.to_csv(f'{OUT_DIR}/gbpusd_final_features.csv', index=False)
-    print(f"\nToutes les étapes terminées. Résultats dans le dossier /{OUT_DIR}")
+    print(f"\n🚀 Pipeline terminé ! Vérifie le graphique backtest_rl.png dans /{OUT_DIR}")

@@ -6,3 +6,4 @@ statsmodels
 pandas_ta
 scikit-learn
 gymnasium
+stable-baselines3[extra]
