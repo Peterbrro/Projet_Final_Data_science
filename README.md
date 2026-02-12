@@ -1,7 +1,8 @@
 # Projet_Final_Data_science
 
 
-PROJET_FINAL/ 
+PROJET_FINAL/  
+
 ├── data/ 
 │   └── gbpusd_m1.csv          # Données sources (T01) 
 ├── models/                    # Registry des modèles (T11) 
