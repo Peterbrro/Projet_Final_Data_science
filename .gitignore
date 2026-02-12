@@ -1,0 +1,23 @@
+# --- Données ---
+data/*.csv
+data/*.txt
+data/*.png
+
+# --- Python & Environnement ---
+__pycache__/
+*.pyc
+.venv/
+.env
+.ipynb_checkpoints/
+
+# --- Résultats & Logs ---
+output/*.png
+output/*.log
+# On ignore les modèles temporaires de l'entraînement, 
+# mais on garde ceux dans /models/v1 qui sont validés.
+output/ppo_trading_model.zip
+
+# --- Système & Docker ---
+.DS_Store
+Thumbs.db
+.docker_temp/
