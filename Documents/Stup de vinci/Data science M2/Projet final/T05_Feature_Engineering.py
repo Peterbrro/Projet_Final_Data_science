@@ -52,7 +52,7 @@ def add_features(df):
 
 # Exécution et sauvegarde
 df_features = add_features(df)
-df_features.to_parquet("data/GBPUSD_M15_FINAL.parquet")
+df_features.to_parquet("data/GBPUSD_M15_FEATURES.parquet")
 
 print(f"Feature Engineering terminé. Nombre de colonnes : {len(df_features.columns)}")
-print(f"Fichier sauvegardé : data/GBPUSD_M15_FINAL.parquet")
+df_features.to_parquet("data/GBPUSD_M15_FEATURES.parquet")
