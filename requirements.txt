@@ -5,3 +5,4 @@ seaborn
 statsmodels
 pandas_ta
 scikit-learn
+gymnasium
