@@ -8,6 +8,8 @@ import seaborn as sns
 import pandas_ta as ta
 from statsmodels.tsa.stattools import adfuller
 from statsmodels.graphics.tsaplots import plot_acf
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
 
 def task_01_import_m1(data_path):
     print("--- DÉBUT T01 : IMPORTATION ET VÉRIFICATION ---")
@@ -41,7 +43,6 @@ def task_02_aggregate_m1_to_m15(df_m1):
 def task_03_clean_m15(df_m15):
     print("\n--- DÉBUT T03 : NETTOYAGE M15 ---")
     df_clean = df_m15.copy()
-    # Suppression des prix incohérents
     df_clean = df_clean[(df_clean['open'] > 0) & (df_clean['high'] >= df_clean['low'])]
     print(f"T03 Terminée : {len(df_clean)} bougies propres.")
     return df_clean
@@ -51,13 +52,11 @@ def task_04_exploratory_analysis(df):
     df = df.copy()
     df['returns'] = df['close'].pct_change()
     
-    # Distribution
     plt.figure(figsize=(10, 6))
     sns.histplot(df['returns'].dropna(), bins=100, kde=True)
     plt.title("Distribution des Rendements GBP/USD")
     plt.savefig("data/distribution_rendements.png")
     
-    # Volatilité horaire
     df['hour'] = df['timestamp'].dt.hour
     hourly_vol = df.groupby('hour')['returns'].std()
     plt.figure(figsize=(10, 6))
@@ -65,7 +64,6 @@ def task_04_exploratory_analysis(df):
     plt.title("Volatilité par Heure (Saisonnalité)")
     plt.savefig("data/volatilite_horaire.png")
 
-    # Test ADF
     print("Calcul du Test ADF...")
     adf_test = adfuller(df['returns'].dropna())
     print(f"Statistique ADF : {adf_test[0]:.4f}")
@@ -100,7 +98,6 @@ def task_05_feature_engineering(df):
     df['rolling_std_100'] = df['close'].rolling(window=100).std()
     df['volatility_ratio'] = df['rolling_std_20'] / df['rolling_std_100']
     
-    # ADX & MACD
     df = pd.concat([df, ta.adx(df['high'], df['low'], df['close'], length=14)], axis=1)
     df = pd.concat([df, ta.macd(df['close'])], axis=1)
 
@@ -111,23 +108,16 @@ def task_05_feature_engineering(df):
 def task_06_baseline_strategies(df):
     print("\n--- DÉBUT T06 : STRATÉGIES BASELINE ---")
     df = df.copy()
-    
-    # Rendement futur (cible théorique)
     df['next_return'] = df['close'].pct_change().shift(-1)
     
-    # 1. Buy & Hold
     df['strat_buy_hold'] = df['next_return']
-    
-    # 2. Aléatoire
     df['strat_random'] = np.random.choice([1, -1], size=len(df)) * df['next_return']
     
-    # 3. Règles fixes RSI
     df['signal_rsi'] = 0
     df.loc[df['rsi_14'] < 30, 'signal_rsi'] = 1
     df.loc[df['rsi_14'] > 70, 'signal_rsi'] = -1
     df['strat_rsi'] = df['signal_rsi'] * df['next_return']
     
-    # Calculs performances cumulées
     perf_bh = (1 + df['strat_buy_hold'].dropna()).prod() - 1
     perf_rd = (1 + df['strat_random'].dropna()).prod() - 1
     perf_rsi = (1 + df['strat_rsi'].dropna()).prod() - 1
@@ -136,7 +126,6 @@ def task_06_baseline_strategies(df):
     print(f"Performance Aléatoire : {perf_rd:.2%}")
     print(f"Performance Stratégie RSI : {perf_rsi:.2%}")
     
-    # Graphique de comparaison
     plt.figure(figsize=(12, 6))
     (1 + df[['strat_buy_hold', 'strat_random', 'strat_rsi']].fillna(0)).cumprod().plot(ax=plt.gca())
     plt.title("Comparaison des Stratégies Baseline")
@@ -146,6 +135,52 @@ def task_06_baseline_strategies(df):
     print("T06 Terminée : Comparaison sauvegardée.")
     return df
 
+def task_07_machine_learning(df):
+    print("\n--- DÉBUT T07 : MACHINE LEARNING ---")
+    df = df.copy()
+    
+    # Target : 1 si le prix monte à la bougie suivante, sinon 0
+    df['target'] = (df['close'].shift(-1) > df['close']).astype(int)
+    
+    # Sélection des features (uniquement celles calculées en T05)
+    # Note : ADX_14, DMP_14, DMN_14 sont les noms générés par pandas_ta
+    features = ['return_1', 'return_4', 'ema_diff', 'rsi_14', 'rolling_std_20', 
+                'range_15m', 'body', 'upper_wick', 'lower_wick', 'distance_to_ema200',
+                'slope_ema50', 'atr_14', 'volatility_ratio', 'ADX_14', 'DMP_14', 'DMN_14']
+    
+    df_ml = df.dropna(subset=['target'] + features)
+    X = df_ml[features]
+    y = df_ml['target']
+    
+    # Split temporel (80% train, 20% test)
+    split = int(len(df_ml) * 0.8)
+    X_train, X_test = X.iloc[:split], X.iloc[split:]
+    y_train, y_test = y.iloc[:split], y.iloc[split:]
+    
+    print(f"Entraînement sur {len(X_train)} lignes, Test sur {len(X_test)} lignes.")
+    
+    # Modèle Random Forest
+    model = RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42)
+    model.fit(X_train, y_train)
+    
+    # Évaluation
+    y_pred = model.predict(X_test)
+    acc = accuracy_score(y_test, y_pred)
+    print(f"Précision du modèle (Accuracy) : {acc:.2%}")
+    print("\nClassification Report :")
+    print(classification_report(y_test, y_pred))
+    
+    # Importance des features
+    importances = pd.Series(model.feature_importances_, index=features).sort_values(ascending=False)
+    plt.figure(figsize=(10, 6))
+    importances.plot(kind='bar')
+    plt.title("Importance des Features")
+    plt.savefig("data/feature_importance.png")
+    plt.close()
+
+    print("T07 Terminée : Modèle ML entraîné.")
+    return df
+
 if __name__ == "__main__":
     df = task_01_import_m1('data/')
     df = task_02_aggregate_m1_to_m15(df)
@@ -153,6 +188,7 @@ if __name__ == "__main__":
     df = task_04_exploratory_analysis(df)
     df = task_05_feature_engineering(df)
     df = task_06_baseline_strategies(df)
+    df = task_07_machine_learning(df)
     
-    df.to_csv('data/gbpusd_final_features.csv', index=False)
-    print("\n Prêt pour la Phase 7 : Machine Learning.")
+    df.to_csv('data/gbpusd_final_ml.csv', index=False)
+    print("\n Toutes les étapes terminées. Prêt pour la Phase 8 (RL) !")
