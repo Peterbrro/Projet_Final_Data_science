@@ -4,18 +4,19 @@ numpy
 matplotlib
 seaborn
 statsmodels
-pandas_ta
+pandas-ta
 
 # --- Machine Learning & RL ---
 scikit-learn
 gymnasium
-# [extra] installe aussi les outils de monitoring pour RL
 stable-baselines3[extra]
-shimmy>=2.0  # Nécessaire pour la compatibilité Gymnasium/SB3
+shimmy>=2.0
 
-# --- API & Industrialisation (T10-T12) ---
+# --- API & Industrialisation (T10-T13) ---
 fastapi
 uvicorn
 python-multipart
-pydantic      # Pour la validation des données de l'API
-joblib        # Pour sauvegarder/charger tes modèles Random Forest (V1/V2)
+pydantic
+joblib
+streamlit
+plotly
